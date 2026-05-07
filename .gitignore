@@ -55,3 +55,5 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+/ParallelPreprocessing/.vs
+ParallelPreprocessing/test_video.mp4
