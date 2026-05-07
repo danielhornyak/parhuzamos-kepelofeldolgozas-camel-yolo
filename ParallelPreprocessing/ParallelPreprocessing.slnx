@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../ParallelPreprocessing.Tests/ParallelPreprocessing.Tests.csproj" />
+  <Project Path="ParallelPreprocessing.csproj" />
+</Solution>

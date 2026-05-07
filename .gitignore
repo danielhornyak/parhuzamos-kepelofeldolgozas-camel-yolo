@@ -57,3 +57,4 @@ TestResult.xml
 nunit-*.xml
 /ParallelPreprocessing/.vs
 ParallelPreprocessing/test_video.mp4
+ParallelPreprocessing/ParallelPreprocessing.csproj
