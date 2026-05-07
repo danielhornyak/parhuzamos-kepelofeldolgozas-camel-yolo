@@ -11,11 +11,16 @@ public class NormalizeStep : IPreprocessor
 {
     public FrameData Process(FrameData input)
     {
+        int pixelCount = input.PixelData.Length / 3;
         float[] normalized = new float[input.PixelData.Length];
 
-        for (int i = 0; i < input.PixelData.Length; i++)
+        for (int i = 0; i < pixelCount; i++)
         {
-            normalized[i] = input.PixelData[i] / 255.0f;
+            int src = i * 3;
+            // BGR → RGB swap: a loader BGR-t tárol, a YOLO RGB-t vár
+            normalized[src + 0] = input.PixelData[src + 2] / 255.0f; // R
+            normalized[src + 1] = input.PixelData[src + 1] / 255.0f; // G
+            normalized[src + 2] = input.PixelData[src + 0] / 255.0f; // B
         }
 
         return new FrameData
@@ -23,7 +28,7 @@ public class NormalizeStep : IPreprocessor
             Width = input.Width,
             Height = input.Height,
             FrameIndex = input.FrameIndex,
-            PixelData = Array.Empty<byte>(), // Felszabadítjuk - már nem kell
+            PixelData = Array.Empty<byte>(),
             NormalizedData = normalized
         };
     }

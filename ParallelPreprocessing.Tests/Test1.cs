@@ -1,7 +1,6 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using ParallelPreprocessing.Models;
+﻿using ParallelPreprocessing.Models;
 using ParallelPreprocessing.Preprocessing;
-using System;
+using ParallelPreprocessing.Processing;
 
 namespace ParallelPreprocessing.Tests
 {
@@ -46,13 +45,16 @@ namespace ParallelPreprocessing.Tests
             // a CropStep belsejében
             Array.Fill(dummyPixels, (byte)128);
 
+            // Bemeneti képkocka összeállítása a tesztadatokkal
             var inputFrame = new FrameData
             {
                 Width = width,
                 Height = height,
                 PixelData = dummyPixels
             };
-            var cropStep = new CropStep(0.30f); // 30%-os felső vágás
+
+            // A vizsgált CropStep példányosítása 30%-os felső vágással
+            var cropStep = new CropStep(0.30f);
 
             // ---- Act (Végrehajtás) ----
             // A vágási lépés futtatása a tesztképen
@@ -105,6 +107,7 @@ namespace ParallelPreprocessing.Tests
         public void ResizeStep_BilinearInterpolation_ScalesCorrectly()
         {
             // ---- Arrange ----
+            // Forrás- és célméretek definiálása
             int srcWidth = 4;
             int srcHeight = 4;
             int targetWidth = 2;
@@ -114,19 +117,25 @@ namespace ParallelPreprocessing.Tests
             // Egységes szín esetén az interpoláció eredménye is azonos szín
             // kell legyen — ez ellenőrzi, hogy a súlyozási képlet helyes.
             byte[] pixels = new byte[srcWidth * srcHeight * 3];
+
+            // Pixelenként végigiterálunk és beállítjuk a piros színt
+            // (3 byte-ot lépünk: R, G, B csatornák egy pixelben)
             for (int i = 0; i < pixels.Length; i += 3)
             {
-                pixels[i] = 255;     // R csatorna
-                pixels[i + 1] = 0;   // G csatorna
-                pixels[i + 2] = 0;   // B csatorna
+                pixels[i] = 255;     // R csatorna — maximális piros
+                pixels[i + 1] = 0;   // G csatorna — nincs zöld
+                pixels[i + 2] = 0;   // B csatorna — nincs kék
             }
 
+            // Bemeneti képkocka létrehozása a tesztképpel
             var inputFrame = new FrameData
             {
                 Width = srcWidth,
                 Height = srcHeight,
                 PixelData = pixels
             };
+
+            // A vizsgált ResizeStep példányosítása a célmérettel
             var resizeStep = new ResizeStep(targetWidth, targetHeight);
 
             // ---- Act ----
@@ -156,43 +165,47 @@ namespace ParallelPreprocessing.Tests
             //   B ≤ 5   (nem lehet sokkal nagyobb 0-nál)
             for (int i = 0; i < resultFrame.PixelData.Length; i += 3)
             {
+                // R csatorna közel maximális kell legyen
                 Assert.IsGreaterThanOrEqualTo(250, resultFrame.PixelData[i],
                     $"R csatorna interpolációs hiba a {i} indexnél.");
+
+                // G csatorna közel nulla kell legyen
                 Assert.IsLessThanOrEqualTo(5, resultFrame.PixelData[i + 1],
                     $"G csatorna interpolációs hiba a {i + 1} indexnél.");
+
+                // B csatorna közel nulla kell legyen
                 Assert.IsLessThanOrEqualTo(5, resultFrame.PixelData[i + 2],
                     $"B csatorna interpolációs hiba a {i + 2} indexnél.");
             }
         }
 
-        // ============================================================
-        // TESZT 3: NormalizeStep — byte → float konverzió
+        // TESZT 3: NormalizeStep — byte → float konverzió + BGR→RGB swap
         // ============================================================
         // Cél: Verifikálni, hogy a normalizálás korrekt módon konvertálja
         //      a [0..255] tartományú byte értékeket [0.0..1.0] tartományú
-        //      float értékekké, és felszabadítja a nyers byte tömböt
-        //      a memória takarékos kezelése érdekében.
+        //      float értékekké, egyidejűleg BGR→RGB csatornacserét végez,
+        //      és felszabadítja a nyers byte tömböt.
         //
-        // Tesztelt képlet (4.3): float[i] = byte[i] / 255.0f
+        // A PixelData BGR-ben érkezik (a loader CvtColor nélkül másol).
+        // A NormalizeStep csere: normalized[0]=R, normalized[1]=G, normalized[2]=B.
         //
-        // Tesztpontok:
-        //   0   → 0.000f  (alsó határ)
-        //   127 → 0.498f  (~középérték, kerekítési viselkedés)
-        //   255 → 1.000f  (felső határ)
+        // Tesztpixel (1×1, BGR): B=0, G=127, R=255
+        // Várható RGB output:
+        //   normalized[0] = R/255 = 255/255 = 1.000f
+        //   normalized[1] = G/255 = 127/255 ≈ 0.498f
+        //   normalized[2] = B/255 =   0/255 = 0.000f
         //
         // Mit verifikálunk:
         //   - A NormalizedData tömb létezik és nem null
         //   - A tömb hossza egyezik a bemeneti pixel számmal
-        //   - A normalizált értékek pontosak (0.001 tűréssel)
+        //   - A normalizált értékek pontosak és BGR→RGB sorrendben vannak (0.001 tűréssel)
         //   - A nyers PixelData tömb felszabadult (null vagy üres)
-        //     → ez memóriaoptimalizációs követelmény, hogy a GC
-        //       hamarabb felszabadíthassa a már nem szükséges adatot
         // ============================================================
         [TestMethod]
         public void NormalizeStep_ConvertsByteToFloatCorrectly()
         {
             // ---- Arrange ----
-            // Három tesztpont: alsó határ (0), középérték (127), felső határ (255)
+            // 1×1 pixel BGR sorrendben: B=0, G=127, R=255
             byte[] pixels = new byte[] { 0, 127, 255 };
             var inputFrame = new FrameData
             {
@@ -206,31 +219,244 @@ namespace ParallelPreprocessing.Tests
             var resultFrame = normalizeStep.Process(inputFrame);
 
             // ---- Assert ----
-            // Alapvető szerkezeti ellenőrzések
             Assert.IsNotNull(resultFrame, "A normalizálás eredménye nem lehet null.");
-            Assert.IsNotNull(resultFrame.NormalizedData,
-                "A normalizált adat nem lehet null.");
-            Assert.HasCount(3, resultFrame.NormalizedData,
-                "A normalizált tömb hossza nem egyezik a bemenettel.");
+            Assert.IsNotNull(resultFrame.NormalizedData, "A normalizált adat nem lehet null.");
+            Assert.HasCount(3, resultFrame.NormalizedData, "A normalizált tömb hossza nem egyezik a bemenettel.");
 
-            // Numerikus pontosság ellenőrzése (0.001 tűrés a float-aritmetikára)
-            Assert.AreEqual(0.0f, resultFrame.NormalizedData[0], 0.001f,
-                "0 byte → 0.0f normalizálási hiba.");
+            // BGR→RGB swap után: [0]=R=1.0, [1]=G≈0.498, [2]=B=0.0
+            Assert.AreEqual(1.0f, resultFrame.NormalizedData[0], 0.001f,
+                "BGR→RGB: R csatorna (255 byte → 1.0f) hiba.");
+
+            // Javítva: 0.498f az elvárt érték, és a [1]-es index a G csatorna
             Assert.AreEqual(0.498f, resultFrame.NormalizedData[1], 0.001f,
-                "127 byte → ~0.498f normalizálási hiba (127/255).");
-            Assert.AreEqual(1.0f, resultFrame.NormalizedData[2], 0.001f,
-                "255 byte → 1.0f normalizálási hiba.");
+                "BGR→RGB: G csatorna (127 byte → ~0.498f) hiba.");
 
-            // Memóriafelszabadítás verifikálása.
-            // Az implementáció kétféleképpen jelezheti a felszabadítást:
-            //   1. PixelData = null            → klasszikus referencia-elengedés
-            //   2. PixelData = Array.Empty<byte>() → biztonságosabb, null-mentes minta
-            // Mindkét megoldást elfogadjuk érvényesnek.
-            bool isReleased = resultFrame.PixelData == null
-                              || resultFrame.PixelData.Length == 0;
-            Assert.IsTrue(isReleased,
-                "A nyers byte tömböt fel kellett volna szabadítani " +
-                "(null vagy üres tömb) a GC tehermentesítése érdekében.");
+            Assert.AreEqual(0.0f, resultFrame.NormalizedData[2], 0.001f,
+                "BGR→RGB: B csatorna (0 byte → 0.0f) hiba.");
+
+            bool isReleased = resultFrame.PixelData == null || resultFrame.PixelData.Length == 0;
+            Assert.IsTrue(isReleased, "A nyers byte tömböt fel kellett volna szabadítani...");
+        }
+
+            // ============================================================
+            // TESZT 4: Konzisztencia — Work Pool vs. soros eredmény
+            // ============================================================
+            // Cél: Verifikálni, hogy a párhuzamos WorkPoolProcessor
+            //      bit-szinten azonos eredményt ad, mint a soros referencia.
+            //      Ez kulcsfontosságú szálbiztossági teszt: ha bármelyik
+            //      pixel értéke eltér, az race condition-re vagy hibás
+            //      megosztott állapotra utal.
+            //
+            // Mit verifikálunk:
+            //   - A két modell ugyanannyi képkockát ad vissza
+            //   - Frame-enként a NormalizedData tömbök BIT-PONTOSAN egyeznek
+            //   - A frame-ek sorrend-független módon összevethetők
+            //     (a Work Pool eltérő sorrendben végezhet, ezért
+            //      FrameIndex alapján párosítunk)
+            // ============================================================
+            [TestMethod]
+        public void Consistency_WorkPool_ProducesBitIdenticalResultToSequential()
+        {
+            // ---- Arrange ----
+            // Tesztképkockák mérete (320x240, közepes felbontás)
+            int width = 320;
+            int height = 240;
+
+            // Pipeline példányosítása a célparaméterekkel:
+            //   640x480 célfelbontás, 30%-os felső vágás
+            var pipeline = new PreprocessingPipeline(640, 480, 0.3f);
+
+            // 5 darab teszt képkocka generálása véletlen pixelértékekkel.
+            // Fix seed (42) használata → a teszt determinisztikus,
+            // minden futtatáskor ugyanaz a bemeneti adat.
+            var frames = new List<FrameData>();
+            var rnd = new Random(42);
+            for (int i = 0; i < 5; i++)
+            {
+                // Új byte tömb a képkocka számára (RGB → 3 byte/pixel)
+                byte[] data = new byte[width * height * 3];
+
+                // A tömb feltöltése pszeudo-véletlen byte-okkal
+                rnd.NextBytes(data);
+
+                // Frame hozzáadása a listához egyedi indexszel
+                frames.Add(new FrameData
+                {
+                    FrameIndex = i,
+                    Width = width,
+                    Height = height,
+                    PixelData = data
+                });
+            }
+
+            // ---- Act ----
+            // A bemeneti képkockákat először a SOROS referencián futtatjuk
+            // → ez adja az "igazság-mércét" (ground truth)
+            var sequentialResults = SequentialProcessor.Process(frames, pipeline);
+
+            // Ezután ugyanazokat a képkockákat a párhuzamos
+            // WorkPoolProcessor-on is végigfuttatjuk
+            var workPoolResults = WorkPoolProcessor.Process(frames, pipeline);
+
+            // ---- Assert ----
+            // Először a darabszám egyezését ellenőrizzük — ha bármelyik
+            // képkocka "elveszne" a párhuzamosítás során, ez azonnal kiderül
+            Assert.HasCount(sequentialResults.Length, workPoolResults,
+                "A kimeneti darabszám eltér.");
+
+            // Frame-enkénti összehasonlítás
+            for (int i = 0; i < sequentialResults.Length; i++)
+            {
+                // A soros eredmény közvetlenül indexelhető (sorrendtartó)
+                var seqFrame = sequentialResults[i];
+
+                // A Work Pool eredménye lehet kevert sorrendű, ezért
+                // a megfelelő frame-et FrameIndex alapján keressük meg
+                var poolFrame = workPoolResults.First(f => f.FrameIndex == i);
+
+                // Mindkét frame normalizált adata kell létezzen,
+                // különben a normalizálási lépés sérült
+                Assert.IsNotNull(seqFrame.NormalizedData);
+                Assert.IsNotNull(poolFrame.NormalizedData);
+
+                // Bit-szintű (pixel-szintű) összehasonlítás:
+                // a normalizált float értékeknek PONTOSAN egyezniük kell.
+                // Itt nem használunk tűréshatárt, mert ugyanazon
+                // determinisztikus algoritmus eredményét várjuk —
+                // bármilyen eltérés szálbiztossági hibára utal!
+                for (int j = 0; j < seqFrame.NormalizedData.Length; j++)
+                {
+                    if (seqFrame.NormalizedData[j] != poolFrame.NormalizedData[j])
+                    {
+                        // Pontos hibalokalizálás: melyik frame, melyik pixel
+                        Assert.Fail(
+                            $"Eltérés a {i}. frame {j}. pixelénél! " +
+                            "Szálbiztossági hiba.");
+                    }
+                }
+            }
+        }
+
+        // ============================================================
+        // TESZT 5: Memória — nincs szivárgás nagy köteg után
+        // ============================================================
+        // Cél: Verifikálni, hogy a WorkPoolProcessor nem szivárogtat
+        //      memóriát nagy mennyiségű képkocka feldolgozása után.
+        //      Egy hibás implementáció (pl. statikus listában tárolt
+        //      referenciák, le nem zárt CancellationToken, fel nem
+        //      szabadított ConcurrentBag) jelentős memóriaszivárgáshoz
+        //      vezethet hosszú futtatás során.
+        //
+        // Módszertan:
+        //   1. BEMELEGÍTÉS — kis köteggel előmelegítjük a futási
+        //      környezetet (JIT, thread pool, TLS pufferek).
+        //      Ezeknek az allokációi NORMÁLISAK, nem szivárgások,
+        //      de torzítanák a mérést.
+        //   2. ALAPHELYZET — a bemelegítés UTÁN GC + memóriamérés.
+        //   3. NAGY TERHELÉS — 50 képkocka feldolgozása
+        //      (~184 MB allokáció normál esetben).
+        //   4. MÉRÉS — GC + memóriamérés, és ellenőrzés, hogy
+        //      a különbség egy ésszerű küszöb alatt marad-e.
+        //
+        // Mit verifikálunk:
+        //   - A nagy köteg feldolgozás után a heap memória nem
+        //     növekedett 50 MB-nál többet → nincs szivárgás.
+        // ============================================================
+        [TestMethod]
+        public void Memory_WorkPool_NoLeakAfterLargeBatch()
+        {
+            // ---- Arrange ----
+            // Pipeline példányosítása (a teszt szempontjából a paraméterek
+            // konkrét értéke nem fontos, csak az hogy működjön)
+            var pipeline = new PreprocessingPipeline(640, 480, 0.3f);
+
+            // Lambda-ba kiszervezett feldolgozási logika, hogy ugyanazt
+            // a műveletsort kétszer is meghívhassuk (bemelegítéshez +
+            // valódi teszthez) kódduplikáció nélkül
+            Action<int> processBatch = (frameCount) =>
+            {
+                // Adott számú teszt képkocka előállítása
+                var frames = new List<FrameData>();
+                for (int i = 0; i < frameCount; i++)
+                {
+                    // 100x100-as RGB képkocka (üres byte tömb elég)
+                    frames.Add(new FrameData
+                    {
+                        FrameIndex = i,
+                        Width = 100,
+                        Height = 100,
+                        PixelData = new byte[100 * 100 * 3]
+                    });
+                }
+
+                // Feldolgozás futtatása a Work Pool modellel
+                var results = WorkPoolProcessor.Process(frames, pipeline);
+
+                // Lokális referenciák explicit felszabadítása,
+                // hogy a GC a következő futáskor takaríthasson
+                frames.Clear();
+                results = null;
+            };
+
+            // ===== 1. BEMELEGÍTÉS (WARMUP) =====
+            // Kis kötegen futtatjuk a feldolgozást, hogy a .NET runtime
+            // lefoglalja a Thread stacket, a JIT lefordítsa a metódusokat,
+            // és a ConcurrentBag/TLS belső pufferei előmelegedjenek.
+            // Ezek az allokációk NEM szivárgások, csak indulási overhead!
+            processBatch(10);
+
+            // Kényszerített, agresszív takarítás a bemelegítés után:
+            //   - LOH (Large Object Heap) tömörítése (a 30 KB feletti
+            //     tömbök ide kerülnek, és normál GC-vel nem tömörülnek)
+            //   - Teljes Gen2 GC futtatása (minden generáció)
+            //   - Megvárjuk a finalizálók lefutását
+            //   - Egy újabb GC, hogy a finalizált objektumok is eltűnjenek
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode =
+                System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Forced, true, true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            // ---- Alaphelyzet mérése a bemelegítés UTÁN ----
+            // A 'true' paraméter teljes GC futtatást kényszerít a mérés előtt
+            long memoryBefore = GC.GetTotalMemory(true);
+
+            // ---- Act ----
+            // ===== 2. VALÓDI TESZT =====
+            // 50 képkocka feldolgozása — ez ~184 MB allokációval jár
+            // normál működés mellett. Ha az implementáció szivárog,
+            // ennek nagy része "ottmarad" a heapen a takarítás után is.
+            processBatch(50);
+
+            // Ugyanaz az agresszív takarítás, mint a bemelegítés után —
+            // most viszont KELL hogy minden átmeneti allokáció eltűnjön
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode =
+                System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Forced, true, true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            // ---- Assert ----
+            // Memória mérése a takarítás után
+            long memoryAfter = GC.GetTotalMemory(true);
+
+            // Tűréshatár: 50 MB
+            //   - A .NET CLR belső pooljai (ArrayPool stb.) a
+            //     teljesítmény érdekében visszatartanak puffereket
+            //   - Az MSTest framework önmagában is fogyaszt memóriát
+            //     a tesztfuttatás során
+            //   - Egy VALÓDI szivárgás 50 képkockánál ~184 MB-ot
+            //     hagyna a memóriában → 50 MB küszöb messze elég
+            //     biztonságos a hamis riasztások elkerülésére
+            long diffMB = (memoryAfter - memoryBefore) / (1024 * 1024);
+
+            // A különbségnek kisebb-egyenlőnek kell lennie 50 MB-nál.
+            // A hibaüzenet részletes: ha bukik a teszt, látható
+            // mind a különbség, mind a két abszolút érték
+            Assert.IsLessThanOrEqualTo(50, diffMB,
+                $"Memóriaszivárgás észlelve! {diffMB} MB maradt a memóriában. " +
+                $"(Before: {memoryBefore / 1024 / 1024}MB, " +
+                $"After: {memoryAfter / 1024 / 1024}MB)");
         }
     }
 }

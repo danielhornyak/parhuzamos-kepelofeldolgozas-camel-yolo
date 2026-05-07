@@ -47,17 +47,14 @@ public static class VideoFrameLoader
             if (mat.Empty())
                 break;
 
-            // BGR -> RGB konverzió és byte tömbbe másolás
-            using var rgbMat = new Mat();
-            Cv2.CvtColor(mat, rgbMat, ColorConversionCodes.BGR2RGB);
-
-            byte[] pixelData = new byte[rgbMat.Rows * rgbMat.Cols * 3];
-            System.Runtime.InteropServices.Marshal.Copy(rgbMat.Data, pixelData, 0, pixelData.Length);
+            int pixelCount = mat.Rows * mat.Cols * 3;
+            byte[] pixelData = new byte[pixelCount];
+            System.Runtime.InteropServices.Marshal.Copy(mat.Data, pixelData, 0, pixelCount);
 
             frames.Add(new FrameData
             {
-                Width = rgbMat.Cols,
-                Height = rgbMat.Rows,
+                Width = mat.Cols,
+                Height = mat.Rows,
                 FrameIndex = frameIndex,
                 PixelData = pixelData
             });
@@ -72,6 +69,48 @@ public static class VideoFrameLoader
 
         Console.WriteLine($"\r  Betöltve: {frames.Count} frame, memória: {GC.GetTotalMemory(false) / (1024 * 1024)} MB");
         return frames;
+    }
+
+    /// <summary>
+    /// Streameli a frame-eket a videóból egyenként — nem tölti be az összeset előre.
+    /// A BGR → RGB swap a NormalizeStep-ben történik (nulla pluszköltség).
+    /// </summary>
+    public static IEnumerable<FrameData> StreamFrames(string videoPath, int maxFrames = 0)
+    {
+        if (!File.Exists(videoPath))
+            throw new FileNotFoundException($"A videófájl nem található: {videoPath}");
+
+        using var capture = new VideoCapture(videoPath);
+        if (!capture.IsOpened())
+            throw new InvalidOperationException($"Nem sikerült megnyitni a videót: {videoPath}");
+
+        int totalFrames = (int)capture.Get(VideoCaptureProperties.FrameCount);
+        int width = (int)capture.Get(VideoCaptureProperties.FrameWidth);
+        int height = (int)capture.Get(VideoCaptureProperties.FrameHeight);
+        int limit = maxFrames > 0 ? Math.Min(maxFrames, totalFrames) : totalFrames;
+
+        using var mat = new Mat();
+        int frameIndex = 0;
+
+        while (frameIndex < limit && capture.Read(mat))
+        {
+            if (mat.Empty())
+                yield break;
+
+            int pixelCount = mat.Rows * mat.Cols * 3;
+            byte[] pixelData = new byte[pixelCount];
+            System.Runtime.InteropServices.Marshal.Copy(mat.Data, pixelData, 0, pixelCount);
+
+            yield return new FrameData
+            {
+                Width = mat.Cols,
+                Height = mat.Rows,
+                FrameIndex = frameIndex,
+                PixelData = pixelData
+            };
+
+            frameIndex++;
+        }
     }
 
     /// <summary>
