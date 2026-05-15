@@ -253,7 +253,7 @@ namespace ParallelPreprocessing.Tests
 
             long diffMB = (memoryAfter - memoryBefore) / (1024 * 1024);
 
-            Assert.IsLessThanOrEqualTo(50,
+            Assert.IsLessThanOrEqualTo(40,
 diffMB, $"Memóriaszivárgás észlelve! {diffMB} MB maradt a memóriában. " +
                 $"(Before: {memoryBefore / 1024 / 1024}MB, " +
                 $"After: {memoryAfter / 1024 / 1024}MB)");

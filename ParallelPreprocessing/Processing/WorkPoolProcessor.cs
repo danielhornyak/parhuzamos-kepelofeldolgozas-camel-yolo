@@ -1,14 +1,14 @@
+using System.Collections.Concurrent;
 using ParallelPreprocessing.Models;
 using ParallelPreprocessing.Preprocessing;
 
 namespace ParallelPreprocessing.Processing;
 
 /// <summary>
-/// 3. modell: Work Pool feldolgozás — atomic counter + worker szálak.
-/// Dinamikus terheléselosztás: a szálak menet közben veszik ki a következő frame indexét
-/// (Interlocked.Increment), így nem kell ConcurrentQueue/Bag és a végső rendezés is elmarad.
-/// Az eredménytömb előre allokált, közvetlenül az indexre írunk — szálbiztos, mert
-/// minden index pontosan egy szálé.
+/// 3. modell: Work Pool feldolgozás — ConcurrentQueue + worker szálak.
+/// Dinamikus terheléselosztás: a képkockák egy közös, szálbiztos sorba kerülnek.
+/// A worker szálak ebből a sorból (TryDequeue) veszik ki a következő elemet,
+/// amíg a sor ki nem ürül.
 /// </summary>
 public static class WorkPoolProcessor
 {
@@ -17,26 +17,30 @@ public static class WorkPoolProcessor
         int frameCount = frames.Count;
         var results = new FrameData[frameCount];
         int workerCount = Environment.ProcessorCount;
-        int nextIndex = -1; // a counter; az első Increment 0-t ad
+
+        // 1. A feladatsor (queue) feltöltése az összes frame-mel
+        var queue = new ConcurrentQueue<FrameData>(frames);
 
         var workers = new Thread[workerCount];
         for (int w = 0; w < workerCount; w++)
         {
             workers[w] = new Thread(() =>
             {
-                // Minden worker addig vesz fel feladatot, amíg van.
-                while (true)
+                // 2. Minden worker addig vesz ki elemet a queue-ból, amíg van benne
+                while (queue.TryDequeue(out var frame))
                 {
-                    int idx = Interlocked.Increment(ref nextIndex);
-                    if (idx >= frameCount) break;
-                    results[idx] = pipeline.Execute(frames[idx]);
+                    // 3. Feldolgozás és az eredmény elmentése a megfelelő indexre
+                    results[frame.FrameIndex] = pipeline.Execute(frame);
                 }
             });
             workers[w].Start();
         }
 
+        // 4. Megvárjuk, amíg az összes szál végez
         foreach (var worker in workers)
+        {
             worker.Join();
+        }
 
         return results;
     }

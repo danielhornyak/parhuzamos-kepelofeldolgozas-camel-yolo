@@ -4,15 +4,6 @@ using ParallelPreprocessing.Preprocessing;
 
 namespace ParallelPreprocessing.Utilities;
 
-/// <summary>
-/// Egy benchmark futás eredménye.
-/// </summary>
-/// <param name="ModelName">A mért modell neve (Soros, Statikus Task, Work Pool).</param>
-/// <param name="FrameCount">A feldolgozott képkockák száma.</param>
-/// <param name="ThreadCount">A használt szálak száma.</param>
-/// <param name="ElapsedMs">A teljes futási idő ezredmásodpercben (átlag, ha több mérés volt).</param>
-/// <param name="PerFrameMs">Átlagos idő egy képkockára (ms).</param>
-/// <param name="Speedup">Gyorsulás a soros referenciához képest (1.0 = nincs).</param>
 public record BenchmarkResult(
     string ModelName,
     int FrameCount,
@@ -21,45 +12,29 @@ public record BenchmarkResult(
     double PerFrameMs,
     double Speedup);
 
-/// <summary>
-/// Benchmark futtató: warmup + több mérés átlaga, GC kényszerített ürítéssel a mérések előtt.
-/// A warmup futás kihagyásával eltüntetjük a JIT-fordítás (Tier 0 → Tier 1) zaját.
-/// </summary>
 public static class BenchmarkRunner
 {
-    // Ennyi mérést végzünk és átlagolunk a megbízhatóság érdekében.
-    private const int MeasuredRuns = 3;
-
-    /// <summary>
-    /// Általános benchmark egy paraméter nélküli delegate-re.
-    /// </summary>
     public static BenchmarkResult Run(
         string modelName,
         Func<FrameData[]> processor,
         int frameCount,
         int threadCount,
-        double? baselineAvgMs = null)
+        double? baselineMs = null) 
     {
         // 1) Warmup — eldobjuk az első futást, hogy a JIT végezzen az optimalizációval.
         var warmupResult = processor();
-        warmupResult = null; // hint a GC felé
+        warmupResult = null;
         ForceGc();
 
-        // 2) Több éles mérés — a legrövidebb és legmegbízhatóbb az átlag.
-        double totalMs = 0;
-        for (int run = 0; run < MeasuredRuns; run++)
-        {
-            ForceGc();
-            var sw = Stopwatch.StartNew();
-            var runResult = processor();
-            sw.Stop();
-            totalMs += sw.Elapsed.TotalMilliseconds;
-            runResult = null;
-        }
+        var sw = Stopwatch.StartNew();
+        var runResult = processor();
+        sw.Stop();
 
-        double elapsedMs = totalMs / MeasuredRuns;
+        double elapsedMs = sw.Elapsed.TotalMilliseconds;
+        runResult = null;
+
         double perFrameMs = elapsedMs / frameCount;
-        double speedup = baselineAvgMs.HasValue ? baselineAvgMs.Value / elapsedMs : 1.0;
+        double speedup = baselineMs.HasValue ? baselineMs.Value / elapsedMs : 1.0;
 
         return new BenchmarkResult(modelName, frameCount, threadCount, elapsedMs, perFrameMs, speedup);
     }
@@ -73,9 +48,9 @@ public static class BenchmarkRunner
         List<FrameData> frames,
         PreprocessingPipeline pipeline,
         int threadCount,
-        double? baselineAvgMs = null)
+        double? baselineMs = null)
     {
-        return Run(modelName, () => processor(frames, pipeline), frames.Count, threadCount, baselineAvgMs);
+        return Run(modelName, () => processor(frames, pipeline), frames.Count, threadCount, baselineMs);
     }
 
     // GC kényszerített tisztítás — a mérések közötti zaj csökkentésére.

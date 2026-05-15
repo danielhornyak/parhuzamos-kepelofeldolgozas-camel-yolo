@@ -5,7 +5,6 @@ namespace ParallelPreprocessing.Processing;
 
 /// <summary>
 /// 1. modell: Soros feldolgozás — egyetlen szálon, szekvenciálisan.
-/// Ez a referencia („baseline”), amelyhez a párhuzamos modellek gyorsulását mérjük.
 /// </summary>
 public static class SequentialProcessor
 {

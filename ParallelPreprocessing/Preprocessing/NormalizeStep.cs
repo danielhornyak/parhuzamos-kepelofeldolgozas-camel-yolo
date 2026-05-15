@@ -6,12 +6,9 @@ namespace ParallelPreprocessing.Preprocessing;
 /// Normalizálás: pixelértékek [0,1] tartományba képzése.
 /// Képlet (4.3): N(x,y,c) = I(x,y,c) / 255.0
 /// Egyúttal BGR → RGB sorrendcsere is megtörténik (a loader BGR-t ad, a YOLO RGB-t vár).
-/// Optimalizálás: a 255-tel osztást egyetlen reciprok-szorzás váltja ki,
-/// a hot ciklust unsafe pointerek és kibontott csatornák gyorsítják.
 /// </summary>
 public class NormalizeStep : IPreprocessor
 {
-    // 1/255 előre kiszámolva — az osztás drágább művelet a szorzásnál.
     private const float Inv255 = 1f / 255f;
 
     public unsafe FrameData Process(FrameData input)

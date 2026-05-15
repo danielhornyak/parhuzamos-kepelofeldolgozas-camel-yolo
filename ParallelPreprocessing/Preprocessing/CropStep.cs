@@ -4,8 +4,7 @@ namespace ParallelPreprocessing.Preprocessing;
 
 /// <summary>
 /// Geometriai előfeldolgozás: a kép felső c arányú sávjának eldobása (default c=0.30).
-/// Képlet (4.1): I_crop(x,y) = I(x, y + floor(c*H)), ahol 0 ≤ x &lt; W, 0 ≤ y &lt; H(1-c).
-/// A megmaradó sorok egyetlen tömbblokk-másolással kerülnek át — gyors, cache-barát.
+/// Képlet (4.1): I_crop(x,y) = I(x, y + floor(c*H)), ahol 0 ≤ x &lt; W, 0 ≤ y &lt; H(1-c)
 /// </summary>
 public class CropStep : IPreprocessor
 {
@@ -25,7 +24,6 @@ public class CropStep : IPreprocessor
         int rowBytes = srcW * 3; // BGR — 3 byte/pixel
         byte[] dstBuffer = new byte[dstH * rowBytes];
 
-        // A felső cropRows-t kihagyva, a többit egyben másoljuk.
         Buffer.BlockCopy(
             input.PixelData, cropRows * rowBytes,
             dstBuffer,       0,

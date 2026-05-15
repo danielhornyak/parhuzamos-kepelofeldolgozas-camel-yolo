@@ -5,8 +5,6 @@ namespace ParallelPreprocessing.Preprocessing;
 /// <summary>
 /// Átméretezés bilineáris interpolációval a célméretekre.
 /// Képlet (4.2): a kimeneti pixel a 4 szomszédos forrás-pixel súlyozott átlaga.
-/// Teljesítménykritikus lépés — unsafe pointerekkel, kibontott csatorna-ciklussal
-/// és sor-szintű címszámítás-kiemeléssel optimalizálva.
 /// </summary>
 public class ResizeStep : IPreprocessor
 {
@@ -46,7 +44,6 @@ public class ResizeStep : IPreprocessor
                 float weightY = fy - y0;
                 float invWeightY = 1f - weightY;
 
-                // Két forrás-sor pointer kiemelése: ez O(dstW) szorzást spórol meg soronként.
                 byte* rowTop = srcPtr + y0 * srcStride;
                 byte* rowBot = srcPtr + y1 * srcStride;
                 byte* dstRow = dstPtr + dy * dstStride;
@@ -82,8 +79,6 @@ public class ResizeStep : IPreprocessor
                     float v2 = rowTop[off00 + 2] * w00 + rowTop[off10 + 2] * w10
                              + rowBot[off00 + 2] * w01 + rowBot[off10 + 2] * w11;
 
-                    // Kerekítés és byte tartományba szorítás. A +0.5f miatt az értékek
-                    // [0, 255.5] közöttiek; a clamp védi a határt.
                     outPx[0] = ToByte(v0);
                     outPx[1] = ToByte(v1);
                     outPx[2] = ToByte(v2);
@@ -100,7 +95,6 @@ public class ResizeStep : IPreprocessor
         };
     }
 
-    // Inline-olható segéd: kerekítés + clamp egy lépésben.
     private static byte ToByte(float value)
     {
         int v = (int)(value + 0.5f);

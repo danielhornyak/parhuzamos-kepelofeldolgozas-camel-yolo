@@ -23,7 +23,6 @@ public class PreprocessingPipeline
 
     public FrameData Execute(FrameData frame)
     {
-        // Indexelt ciklus a foreach helyett — minimálisan kisebb overhead.
         var steps = _steps;
         for (int i = 0; i < steps.Length; i++)
         {

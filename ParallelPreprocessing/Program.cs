@@ -49,7 +49,7 @@ var staticResult = BenchmarkRunner.Run(
     StaticTaskProcessor.Process,
     frames, pipeline,
     threadCount: Environment.ProcessorCount,
-    baselineAvgMs: seqResult.ElapsedMs);
+    baselineMs: seqResult.ElapsedMs);
 results.Add(staticResult);
 Console.WriteLine($" {staticResult.ElapsedMs:F2} ms");
 
@@ -60,7 +60,7 @@ var poolResult = BenchmarkRunner.Run(
     WorkPoolProcessor.Process,
     frames, pipeline,
     threadCount: Environment.ProcessorCount,
-    baselineAvgMs: seqResult.ElapsedMs);
+    baselineMs: seqResult.ElapsedMs);
 results.Add(poolResult);
 Console.WriteLine($" {poolResult.ElapsedMs:F2} ms");
 
