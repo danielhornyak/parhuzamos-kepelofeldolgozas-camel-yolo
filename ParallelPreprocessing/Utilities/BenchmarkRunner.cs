@@ -21,7 +21,6 @@ public static class BenchmarkRunner
         int threadCount,
         double? baselineMs = null) 
     {
-        // 1) Warmup — eldobjuk az első futást, hogy a JIT végezzen az optimalizációval.
         var warmupResult = processor();
         warmupResult = null;
         ForceGc();
@@ -39,9 +38,6 @@ public static class BenchmarkRunner
         return new BenchmarkResult(modelName, frameCount, threadCount, elapsedMs, perFrameMs, speedup);
     }
 
-    /// <summary>
-    /// Kényelmi overload: a feldolgozó (frames, pipeline) szignatúrájára van szabva.
-    /// </summary>
     public static BenchmarkResult Run(
         string modelName,
         Func<List<FrameData>, PreprocessingPipeline, FrameData[]> processor,
