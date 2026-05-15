@@ -1,39 +1,43 @@
-using System.Collections.Concurrent;
 using ParallelPreprocessing.Models;
 using ParallelPreprocessing.Preprocessing;
 
 namespace ParallelPreprocessing.Processing;
 
 /// <summary>
-/// 3. modell: Work Pool feldolgozás - ConcurrentQueue + worker szálak.
-/// Dinamikus terheléselosztás: a szálak menet közben veszik ki a feladatokat a sorból.
-/// A szálszámot az Environment.ProcessorCount határozza meg.
+/// 3. modell: Work Pool feldolgozás — atomic counter + worker szálak.
+/// Dinamikus terheléselosztás: a szálak menet közben veszik ki a következő frame indexét
+/// (Interlocked.Increment), így nem kell ConcurrentQueue/Bag és a végső rendezés is elmarad.
+/// Az eredménytömb előre allokált, közvetlenül az indexre írunk — szálbiztos, mert
+/// minden index pontosan egy szálé.
 /// </summary>
 public static class WorkPoolProcessor
 {
     public static FrameData[] Process(List<FrameData> frames, PreprocessingPipeline pipeline)
     {
-        var queue = new ConcurrentQueue<FrameData>(frames);
-        var results = new ConcurrentBag<FrameData>();
+        int frameCount = frames.Count;
+        var results = new FrameData[frameCount];
         int workerCount = Environment.ProcessorCount;
+        int nextIndex = -1; // a counter; az első Increment 0-t ad
 
         var workers = new Thread[workerCount];
-        for (int i = 0; i < workerCount; i++)
+        for (int w = 0; w < workerCount; w++)
         {
-            workers[i] = new Thread(() =>
+            workers[w] = new Thread(() =>
             {
-                while (queue.TryDequeue(out var frame))
+                // Minden worker addig vesz fel feladatot, amíg van.
+                while (true)
                 {
-                    var processed = pipeline.Execute(frame);
-                    results.Add(processed);
+                    int idx = Interlocked.Increment(ref nextIndex);
+                    if (idx >= frameCount) break;
+                    results[idx] = pipeline.Execute(frames[idx]);
                 }
             });
-            workers[i].Start();
+            workers[w].Start();
         }
 
         foreach (var worker in workers)
             worker.Join();
 
-        return results.OrderBy(f => f.FrameIndex).ToArray();
+        return results;
     }
 }
