@@ -4,18 +4,21 @@ using ParallelPreprocessing.Preprocessing;
 namespace ParallelPreprocessing.Processing;
 
 /// <summary>
-/// 1. modell: Soros feldolgozás - egyetlen szálon, szekvenciálisan.
-/// Referencia alap a párhuzamos modellek összehasonlításához.
+/// 1. modell: Soros feldolgozás — egyetlen szálon, szekvenciálisan.
+/// Ez a referencia („baseline”), amelyhez a párhuzamos modellek gyorsulását mérjük.
 /// </summary>
 public static class SequentialProcessor
 {
     public static FrameData[] Process(List<FrameData> frames, PreprocessingPipeline pipeline)
     {
-        var results = new FrameData[frames.Count];
-        for (int i = 0; i < frames.Count; i++)
+        int frameCount = frames.Count;
+        var results = new FrameData[frameCount];
+
+        for (int i = 0; i < frameCount; i++)
         {
             results[i] = pipeline.Execute(frames[i]);
         }
+
         return results;
     }
 }

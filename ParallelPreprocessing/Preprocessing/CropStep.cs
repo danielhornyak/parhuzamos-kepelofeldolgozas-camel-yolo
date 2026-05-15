@@ -3,9 +3,9 @@ using ParallelPreprocessing.Models;
 namespace ParallelPreprocessing.Preprocessing;
 
 /// <summary>
-/// Geometriai előfeldolgozás: felső 30%-os függőleges vágás (C30).
-/// Képlet (4.1): I_crop(x,y) = I(x, y + floor(c*H))
-/// ahol 0 ≤ x < W, 0 ≤ y < H(1-c), c = kivágási arány
+/// Geometriai előfeldolgozás: a kép felső c arányú sávjának eldobása (default c=0.30).
+/// Képlet (4.1): I_crop(x,y) = I(x, y + floor(c*H)), ahol 0 ≤ x &lt; W, 0 ≤ y &lt; H(1-c).
+/// A megmaradó sorok egyetlen tömbblokk-másolással kerülnek át — gyors, cache-barát.
 /// </summary>
 public class CropStep : IPreprocessor
 {
@@ -18,23 +18,25 @@ public class CropStep : IPreprocessor
 
     public FrameData Process(FrameData input)
     {
-        int cropRows = (int)Math.Floor(_cropRatio * input.Height);
-        int newHeight = input.Height - cropRows;
-        int bytesPerRow = input.Width * 3; // RGB
-        byte[] croppedPixels = new byte[newHeight * bytesPerRow];
+        int srcW = input.Width;
+        int srcH = input.Height;
+        int cropRows = (int)Math.Floor(_cropRatio * srcH); // levágandó felső sorok
+        int dstH = srcH - cropRows;
+        int rowBytes = srcW * 3; // BGR — 3 byte/pixel
+        byte[] dstBuffer = new byte[dstH * rowBytes];
 
-        // Felső cropRows sor elhagyása, alsó rész másolása
+        // A felső cropRows-t kihagyva, a többit egyben másoljuk.
         Buffer.BlockCopy(
-            input.PixelData, cropRows * bytesPerRow,
-            croppedPixels, 0,
-            newHeight * bytesPerRow);
+            input.PixelData, cropRows * rowBytes,
+            dstBuffer,       0,
+            dstH * rowBytes);
 
         return new FrameData
         {
-            Width = input.Width,
-            Height = newHeight,
+            Width = srcW,
+            Height = dstH,
             FrameIndex = input.FrameIndex,
-            PixelData = croppedPixels
+            PixelData = dstBuffer
         };
     }
 }

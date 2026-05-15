@@ -2,13 +2,18 @@ using ParallelPreprocessing.Models;
 
 namespace ParallelPreprocessing.Preprocessing;
 
+/// <summary>
+/// A három előfeldolgozási lépést (Crop → Resize → Normalize) láncoló pipeline.
+/// A lépéseket tömbben tárolja és sima for ciklussal futtatja — gyorsabb hívási útvonal,
+/// mint a List+foreach kombináció (nincs enumerátor, JIT könnyebben inline-ol).
+/// </summary>
 public class PreprocessingPipeline
 {
-    private readonly List<IPreprocessor> _steps;
+    private readonly IPreprocessor[] _steps;
 
     public PreprocessingPipeline(int targetWidth, int targetHeight, float cropRatio = 0.30f)
     {
-        _steps = new List<IPreprocessor>
+        _steps = new IPreprocessor[]
         {
             new CropStep(cropRatio),
             new ResizeStep(targetWidth, targetHeight),
@@ -18,8 +23,12 @@ public class PreprocessingPipeline
 
     public FrameData Execute(FrameData frame)
     {
-        foreach (var step in _steps)
-            frame = step.Process(frame);
+        // Indexelt ciklus a foreach helyett — minimálisan kisebb overhead.
+        var steps = _steps;
+        for (int i = 0; i < steps.Length; i++)
+        {
+            frame = steps[i].Process(frame);
+        }
         return frame;
     }
 }

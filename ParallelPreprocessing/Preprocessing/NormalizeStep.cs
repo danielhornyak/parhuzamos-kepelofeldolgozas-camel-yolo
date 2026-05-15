@@ -5,22 +5,33 @@ namespace ParallelPreprocessing.Preprocessing;
 /// <summary>
 /// Normalizálás: pixelértékek [0,1] tartományba képzése.
 /// Képlet (4.3): N(x,y,c) = I(x,y,c) / 255.0
-/// Optimalizált: nem tartja meg a byte[] PixelData-t, csak a float[] eredményt.
+/// Egyúttal BGR → RGB sorrendcsere is megtörténik (a loader BGR-t ad, a YOLO RGB-t vár).
+/// Optimalizálás: a 255-tel osztást egyetlen reciprok-szorzás váltja ki,
+/// a hot ciklust unsafe pointerek és kibontott csatornák gyorsítják.
 /// </summary>
 public class NormalizeStep : IPreprocessor
 {
-    public FrameData Process(FrameData input)
-    {
-        int pixelCount = input.PixelData.Length / 3;
-        float[] normalized = new float[input.PixelData.Length];
+    // 1/255 előre kiszámolva — az osztás drágább művelet a szorzásnál.
+    private const float Inv255 = 1f / 255f;
 
-        for (int i = 0; i < pixelCount; i++)
+    public unsafe FrameData Process(FrameData input)
+    {
+        byte[] srcBuffer = input.PixelData;
+        int byteCount = srcBuffer.Length;
+        int pixelCount = byteCount / 3;
+        float[] dstBuffer = new float[byteCount];
+
+        fixed (byte* srcPtr = srcBuffer)
+        fixed (float* dstPtr = dstBuffer)
         {
-            int src = i * 3;
-            // BGR → RGB swap: a loader BGR-t tárol, a YOLO RGB-t vár
-            normalized[src + 0] = input.PixelData[src + 2] / 255.0f; // R
-            normalized[src + 1] = input.PixelData[src + 1] / 255.0f; // G
-            normalized[src + 2] = input.PixelData[src + 0] / 255.0f; // B
+            // Pixelenként három byte → három float; egyúttal BGR → RGB csere.
+            for (int i = 0; i < pixelCount; i++)
+            {
+                int idx = i * 3;
+                dstPtr[idx]     = srcPtr[idx + 2] * Inv255; // R (forrás 2. byte-ja)
+                dstPtr[idx + 1] = srcPtr[idx + 1] * Inv255; // G (forrás 1. byte-ja)
+                dstPtr[idx + 2] = srcPtr[idx]     * Inv255; // B (forrás 0. byte-ja)
+            }
         }
 
         return new FrameData
@@ -29,7 +40,7 @@ public class NormalizeStep : IPreprocessor
             Height = input.Height,
             FrameIndex = input.FrameIndex,
             PixelData = Array.Empty<byte>(),
-            NormalizedData = normalized
+            NormalizedData = dstBuffer
         };
     }
 }
