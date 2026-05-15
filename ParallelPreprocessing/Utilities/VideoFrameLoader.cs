@@ -78,6 +78,12 @@ public static class VideoFrameLoader
     /// Streameli a frame-eket a videóból egyenként — nem tölti be az összeset előre.
     /// Hasznos, ha kevés a memória, és a feldolgozás is folyamszerű (pl. soros pipeline).
     /// </summary>
+    /// <remarks>
+    /// Ez a metódus a videó folyamatos (streamelt) beolvasásához és valós idejű feldolgozásához készült. 
+    /// Jelenleg a benchmarkolás során nincs használatban, mert az összes képkocka előzetes betöltésével 
+    /// a párhuzamosítás mérése sokkal pontosabb: így a lassú lemez I/O (olvasási) műveletek ideje 
+    /// nem torzítja a CPU-feldolgozás eredményeit.
+    /// </remarks> 
     public static IEnumerable<FrameData> StreamFrames(string videoPath, int maxFrames = 0)
     {
         if (!File.Exists(videoPath))
